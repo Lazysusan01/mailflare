@@ -179,6 +179,25 @@ export async function processInboundMessage(
 		}).onConflictDoNothing().returning({ id: messages.id });
 		if (!inserted.length) return;
 
+		// Announced as soon as the message can be read, not after its attachments are
+		// copied and its notifications sent: a subscriber reading the raw message needs
+		// none of that. If storage below fails the row is removed and the message
+		// retried, so it is then announced again.
+		try {
+			await dispatchWebhooks(env, decision.mailbox.userId, "message.inbound", {
+				messageId,
+				from: fromAddr,
+				to: payload.to,
+				cc: parsed.ccAddr ?? undefined,
+				subject: parsed.subject,
+				threadId,
+				spamScore: spamAnalysis?.score,
+				spamVerdict: spamAnalysis?.verdict,
+			});
+		} catch (error) {
+			console.error(`Webhook dispatch failed for ${messageId}`, error);
+		}
+
 		// Already checked against the inbound limits above; the default validation is the composer's.
 		await storeMessageAttachments(env, messageId, parsed.attachments, { validate: false });
 		if (spamAnalysis) {
@@ -229,16 +248,6 @@ export async function processInboundMessage(
 			subject: parsed.subject,
 		});
 	}
-	await dispatchWebhooks(env, decision.mailbox.userId, "message.inbound", {
-		messageId,
-		from: fromAddr,
-		to: payload.to,
-		cc: parsed.ccAddr ?? undefined,
-		subject: parsed.subject,
-		threadId,
-		spamScore: spamAnalysis?.score,
-		spamVerdict: spamAnalysis?.verdict,
-	});
 	try {
 		await scheduleAutoDraft(env, { mailboxId: decision.mailbox.mailboxId, sourceMessageId: messageId, ownerUserId: decision.mailbox.userId, sender: fromAddr, headers: payload.headers, status, folderId, spamVerdict: spamAnalysis?.verdict, spamAnalysisError });
 	} catch (error) { console.error("Auto-draft scheduling failed", error); }
