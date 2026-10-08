@@ -179,7 +179,8 @@ export async function processInboundMessage(
 		}).onConflictDoNothing().returning({ id: messages.id });
 		if (!inserted.length) return;
 
-		await storeMessageAttachments(env, messageId, parsed.attachments);
+		// Already checked against the inbound limits above; the default validation is the composer's.
+		await storeMessageAttachments(env, messageId, parsed.attachments, { validate: false });
 		if (spamAnalysis) {
 			try {
 				await recordReputationObservation(env, decision.mailbox.mailboxId, getReputationKeys(parsed, spamAnalysis.fingerprint));
