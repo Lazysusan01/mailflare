@@ -18,7 +18,7 @@ export const MAX_ATTACHMENT_COUNT = 10;
  * embedded photos) are counted too, so a forwarded thread with a document and a few
  * signatures passes ten without anyone attaching ten files. The size limits still apply.
  */
-export const MAX_INBOUND_ATTACHMENT_COUNT = 30;
+export const MAX_INBOUND_ATTACHMENT_COUNT = 100;
 
 export function decodeBase64Content(content: string): ArrayBuffer {
 	const binary = atob(content.replace(/\s/g, ""));
