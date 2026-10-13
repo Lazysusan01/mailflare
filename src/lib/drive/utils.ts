@@ -1,12 +1,13 @@
 import type { DriveCrumb, DriveRole, DriveRow } from "./types";
 
 /**
- * Files upload in parts straight into an R2 multipart upload, so no file is ever buffered in the Worker. A part must stay
+ * Files upload in parts into a multipart upload (R2, or Backblaze B2 when configured), so no whole file is ever buffered in the Worker;
+ * with B2 one part at a time is held in memory to be signed, so keep this well under the 128 MB Worker limit. A part must stay
  * under the 100 MB request limit of Cloudflare's Free and Pro plans, and R2 allows 10,000 parts per object, which caps a
  * file at about 640 GB. Lowering the part size shrinks that cap; raising it needs a plan with larger request bodies.
  */
 export const DRIVE_PART_BYTES = 64 * 1024 * 1024;
-/** How long an interrupted upload can be resumed. R2 should be set to abort incomplete multipart uploads after about as long. */
+/** How long an interrupted upload can be resumed. The bucket should be set to abort incomplete multipart uploads after about as long. */
 export const DRIVE_UPLOAD_RESUME_MS = 3 * 24 * 60 * 60 * 1000;
 export const DRIVE_MAX_PARTS = 10_000;
 export const DRIVE_MAX_FILE_BYTES = DRIVE_PART_BYTES * DRIVE_MAX_PARTS;
@@ -43,17 +44,4 @@ export function formatDriveSize(bytes: number): string {
 export function driveContentDisposition(filename: string, inline: boolean): string {
 	const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
 	return `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
-}
-
-/** Types that are safe to render in the browser; everything else (HTML, SVG, scripts) is forced to download. */
-export function isDriveInlineSafe(contentType: string): boolean {
-	return (
-		contentType === "application/pdf" ||
-		contentType.startsWith("audio/") ||
-		contentType.startsWith("video/") ||
-		(contentType.startsWith("image/") && contentType !== "image/svg+xml") ||
-		contentType === "text/plain" ||
-		contentType === "text/csv" ||
-		contentType === "application/json"
-	);
 }

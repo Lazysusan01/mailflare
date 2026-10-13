@@ -135,8 +135,56 @@ export function RichTextEditor({
 		}
 	}
 
+	const formatButtons = (
+		<>
+		{COMMANDS.map((item) => (
+			<Tooltip key={item.command} label={t(item.labelKey)}>
+				<button
+					type="button"
+					aria-label={t(item.labelKey)}
+					aria-pressed={!!active[item.command]}
+					disabled={disabled}
+					onMouseDown={(event) => event.preventDefault()}
+					onClick={() => run(item.command, item.value)}
+					className={cn(
+						"rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900",
+						active[item.command] && "bg-neutral-200 text-neutral-900",
+					)}
+				>
+					<item.icon className="h-4 w-4" />
+				</button>
+			</Tooltip>
+		))}
+		<Tooltip label={t("editor.insertLinkHint")}>
+			<button
+				type="button"
+				aria-label={t("editor.insertLink")}
+				disabled={disabled}
+				onMouseDown={(event) => event.preventDefault()}
+				onClick={openLink}
+				className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+			>
+				<Link2 className="h-4 w-4" />
+			</button>
+		</Tooltip>
+		<Tooltip label={t("editor.clearFormatting")}>
+			<button
+				type="button"
+				aria-label={t("editor.clearFormatting")}
+				disabled={disabled}
+				onMouseDown={(event) => event.preventDefault()}
+				onClick={() => run("removeFormat")}
+				className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+			>
+				<RemoveFormatting className="h-4 w-4" />
+			</button>
+		</Tooltip>
+		</>
+	);
+
 	return (
 		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+			<div className="sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto bg-white px-2 py-1 md:hidden">{formatButtons}</div>
 			<div className="relative min-h-0 flex-1 overflow-y-auto">
 				<div
 					ref={editorRef}
@@ -163,6 +211,7 @@ export function RichTextEditor({
 							type="button"
 							onClick={() => setShowQuoted((open) => !open)}
 							aria-expanded={showQuoted}
+							aria-label={showQuoted ? t("editor.hideQuoted") : t("editor.showQuoted")}
 							className="rounded-full border border-neutral-200 bg-neutral-100 px-2 text-xs leading-5 text-neutral-500 hover:bg-neutral-200"
 							title={showQuoted ? t("editor.hideQuoted") : t("editor.showQuoted")}
 						>
@@ -175,50 +224,9 @@ export function RichTextEditor({
 				)}
 			</div>
 			{footerContent}
-			<div className="relative flex items-center gap-0.5 border-t border-neutral-100 px-4 py-3">
+			<div className="relative flex items-center gap-0.5 max-md:gap-2 border-t border-neutral-100 px-4 py-3 max-md:border-t-0">
 				{toolbarStart}
-				{COMMANDS.map((item) => (
-					<Tooltip key={item.command} label={t(item.labelKey)}>
-						<button
-							type="button"
-							aria-label={t(item.labelKey)}
-							aria-pressed={!!active[item.command]}
-							disabled={disabled}
-							onMouseDown={(event) => event.preventDefault()}
-							onClick={() => run(item.command, item.value)}
-							className={cn(
-								"rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900",
-								active[item.command] && "bg-neutral-200 text-neutral-900",
-							)}
-						>
-							<item.icon className="h-4 w-4" />
-						</button>
-					</Tooltip>
-				))}
-				<Tooltip label={t("editor.insertLinkHint")}>
-					<button
-						type="button"
-						aria-label={t("editor.insertLink")}
-						disabled={disabled}
-						onMouseDown={(event) => event.preventDefault()}
-						onClick={openLink}
-						className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
-					>
-						<Link2 className="h-4 w-4" />
-					</button>
-				</Tooltip>
-				<Tooltip label={t("editor.clearFormatting")}>
-					<button
-						type="button"
-						aria-label={t("editor.clearFormatting")}
-						disabled={disabled}
-						onMouseDown={(event) => event.preventDefault()}
-						onClick={() => run("removeFormat")}
-						className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
-					>
-						<RemoveFormatting className="h-4 w-4" />
-					</button>
-				</Tooltip>
+				<div className="contents max-md:hidden">{formatButtons}</div>
 				{toolbarEnd}
 				{linkOpen && (
 					<form
@@ -236,6 +244,7 @@ export function RichTextEditor({
 								if (event.key === "Escape") setLinkOpen(false);
 							}}
 							placeholder="https://example.com"
+							aria-label={t("editor.insertLink")}
 							className="h-8 w-64 rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"
 						/>
 						<button type="submit" className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">

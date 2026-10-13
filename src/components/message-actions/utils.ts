@@ -121,19 +121,16 @@ export function getMoveMessageActions(
 
 export function getMessageActionRedirect(
   action: BulkMessageAction,
-  direction: "inbound" | "outbound",
+  listHref: string,
 ) {
-  if (action === "trash") return "/trash";
-  if (action === "spam") return "/spam";
-  if (action === "archive") return "/archived";
-  if (action === "inbox") return "/inbox";
+  if (action === "trash" || action === "spam" || action === "archive" || action === "inbox") return listHref;
   return null;
 }
 
 export function buildReplySubject(subject: string | null | undefined) {
   const trimmed = (subject ?? "").trim();
   if (!trimmed) return "Re:";
-  return /^re:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
+  return /^re\s*(\[\d+\])?\s*:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
 }
 
 export function buildReplyQuote(
