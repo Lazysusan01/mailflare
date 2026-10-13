@@ -98,6 +98,9 @@
 			{
 				"queue": "mailflare-inbound",
 				"max_batch_size": 5,
+				// Deliver at once. The default waits up to 5s for a batch to fill, which
+				// is 5s added to every message on a quiet mailbox.
+				"max_batch_timeout": 0,
 				"max_retries": 3,
 			},
 			{
