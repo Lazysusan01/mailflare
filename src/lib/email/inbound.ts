@@ -17,6 +17,9 @@ import { resolveThreadId } from "@/lib/email/threading";
 import { normalizeMessageId } from "@/lib/email/thread-lookup";
 import type { SessionUser } from "@/lib/auth/types";
 import { analyzeSpam } from "@/lib/spam/engine";
+import { ExternalSpamIntelligenceProvider } from "@/lib/spam/providers/external";
+import { getSpamIntelligenceConfig } from "@/lib/spam/settings";
+import type { ProviderVerdicts } from "@/lib/spam/types";
 import { getReputationKeys } from "@/lib/spam/analyzers/reputation";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import {
@@ -30,6 +33,8 @@ export type InboundQueueMessage = {
 	to: string;
 	rawR2Key: string;
 	headers?: Record<string, string>;
+	verdicts?: ProviderVerdicts;
+	senderIp?: string;
 };
 
 /** True when the address is a mailbox or alias owned by the user, so their own mail never counts as unread. */
@@ -123,12 +128,17 @@ export async function processInboundMessage(
 	const [owner] = await db.select({ enabled: users.spamProtectionEnabled }).from(users).where(eq(users.id, decision.mailbox.userId)).limit(1);
 	if (owner?.enabled !== false) {
 		try {
+			const intelligence = await getSpamIntelligenceConfig(env);
 			spamAnalysis = await analyzeSpam(db, {
 				mailboxId: decision.mailbox.mailboxId,
 				userId: decision.mailbox.userId,
 				envelopeFrom: payload.from,
 				headers: payload.headers,
+				verdicts: payload.verdicts,
+				senderIp: payload.senderIp,
+				brands: intelligence.brands,
 				message: parsed,
+				intelligenceProvider: new ExternalSpamIntelligenceProvider(intelligence, env.BUCKET),
 			});
 		} catch (error) {
 			spamAnalysisError = error instanceof Error ? error.message.slice(0, 300) : "Spam analysis failed";
@@ -182,6 +192,7 @@ export async function processInboundMessage(
 			fromAddr,
 			toAddr,
 			ccAddr: parsed.ccAddr,
+			replyTo: parsed.replyTo,
 			subject: parsed.subject,
 			snippet,
 			textBody: parsed.text,
@@ -200,27 +211,7 @@ export async function processInboundMessage(
 		}).onConflictDoNothing().returning({ id: messages.id });
 		if (!inserted.length) return;
 
-		// Announced as soon as the message can be read, not after its attachments are
-		// copied and its notifications sent: a subscriber reading the raw message needs
-		// none of that. If storage below fails the row is removed and the message
-		// retried, so it is then announced again.
-		try {
-			await dispatchWebhooks(env, decision.mailbox.userId, "message.inbound", {
-				messageId,
-				from: fromAddr,
-				to: payload.to,
-				cc: parsed.ccAddr ?? undefined,
-				subject: parsed.subject,
-				threadId,
-				spamScore: spamAnalysis?.score,
-				spamVerdict: spamAnalysis?.verdict,
-			});
-		} catch (error) {
-			console.error(`Webhook dispatch failed for ${messageId}`, error);
-		}
-
-		// Already checked against the inbound limits above; the default validation is the composer's.
-		await storeMessageAttachments(env, messageId, parsed.attachments, { validate: false });
+		await storeMessageAttachments(env, messageId, parsed.attachments);
 		if (spamAnalysis) {
 			try {
 				await recordReputationObservation(env, decision.mailbox.mailboxId, getReputationKeys(parsed, spamAnalysis.fingerprint));
@@ -254,7 +245,9 @@ export async function processInboundMessage(
 		}
 	}
 
-	if (status !== "spam") {
+	if (status === "spam") {
+		console.info(`No notification for ${messageId}: filed as spam`);
+	} else {
 		const notificationUserIds = await getMailboxNotificationUserIds(
 			env,
 			decision.mailbox.mailboxId,
@@ -269,6 +262,16 @@ export async function processInboundMessage(
 			subject: parsed.subject,
 		});
 	}
+	await dispatchWebhooks(env, decision.mailbox.userId, "message.inbound", {
+		messageId,
+		from: fromAddr,
+		to: payload.to,
+		cc: parsed.ccAddr ?? undefined,
+		subject: parsed.subject,
+		threadId,
+		spamScore: spamAnalysis?.score,
+		spamVerdict: spamAnalysis?.verdict,
+	});
 	try {
 		await scheduleAutoDraft(env, { mailboxId: decision.mailbox.mailboxId, sourceMessageId: messageId, ownerUserId: decision.mailbox.userId, sender: fromAddr, headers: payload.headers, status, folderId, spamVerdict: spamAnalysis?.verdict, spamAnalysisError });
 	} catch (error) { console.error("Auto-draft scheduling failed", error); }
